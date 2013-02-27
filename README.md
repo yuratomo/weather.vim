@@ -3,7 +3,7 @@ weather.vim
 
 Description
 -----------
-japan weather for vim
+The weather of japan for vim
 
 Requirements
 ------------
@@ -11,5 +11,5 @@ weather.vim is requires cURL. please install it.
 
 Usage
 -----
-  :Weather [“ss–¼]
+  :Weather [ã•ã„ãŸã¾]
 

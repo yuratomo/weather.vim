@@ -1,4 +1,3 @@
-
 if exists('g:loaded_weather') && g:loaded_weather == 1
   finish
 endif

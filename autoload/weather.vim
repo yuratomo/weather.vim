@@ -313,12 +313,12 @@ function! weather#city(city)
 
   " title
   call setline(1, s:title)
-  call s:out(s:toAll)
+  call setline(2, '')
 
   " weather
-  call setline(3, printf('| (%10s)  | (%10s)  | (%10s)  | %s',    json.forecasts[0].date, json.forecasts[1].date, json.forecasts[2].date, json.location.area))
-  call setline(4, printf('| %-10s    | %-10s    | %-10s    | %s', json.forecasts[0].dateLabel, json.forecasts[1].dateLabel, json.forecasts[2].dateLabel, json.location.prefecture))
-  call setline(5, printf('| %-10s    | %-10s    | %-10s    | %s', json.forecasts[0].telop, json.forecasts[1].telop, json.forecasts[2].telop, json.location.city))
+  call s:out(printf('| (%10s)  | (%10s)  | (%10s)  | %s',    json.forecasts[0].date, json.forecasts[1].date, json.forecasts[2].date, json.location.area))
+  call s:out(printf('| %-10s    | %-10s    | %-10s    | %s', json.forecasts[0].dateLabel, json.forecasts[1].dateLabel, json.forecasts[2].dateLabel, json.location.prefecture))
+  call s:out(printf('| %-10s    | %-10s    | %-10s    | %s', json.forecasts[0].telop, json.forecasts[1].telop, json.forecasts[2].telop, json.location.city))
   let templ = ''
   for idx in range(len(json.forecasts))
     if has_key(json.forecasts[idx].temperature, 'min')
@@ -331,12 +331,14 @@ function! weather#city(city)
       let templ .= '|               '
     endif
   endfor
-  call setline(6, templ . '| ')
+  call s:out(templ . '| ')
   call s:out('')
 
   " è⁄ç◊
   call s:out('---------------------------------------------------------------')
   call s:out(json.description.text)
+  call s:out('')
+  call s:out(s:toAll)
   call s:out('')
 
   " copyright

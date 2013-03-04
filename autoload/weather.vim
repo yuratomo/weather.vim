@@ -2,6 +2,206 @@ let s:title = '                   ---  WEATHER-VIM  ---'
 let s:toAll = '>>ëSçë'
 let s:locations = []
 let [s:WIN_ALL, s:WIN_CITY] = range(2)
+
+function! s:nr2byte(nr)
+  if a:nr < 0x80
+    return nr2char(a:nr)
+  elseif a:nr < 0x800
+    return nr2char(a:nr/64+192).nr2char(a:nr%64+128)
+  else
+    return nr2char(a:nr/4096%16+224).nr2char(a:nr/64%64+128).nr2char(a:nr%64+128)
+  endif
+endfunction
+
+function! s:nr2enc_char(charcode)
+  if &encoding == 'utf-8'
+    return nr2char(a:charcode)
+  endif
+  let char = s:nr2byte(a:charcode)
+  if strlen(char) > 1
+    let char = strtrans(iconv(char, 'utf-8', &encoding))
+  endif
+  return char
+endfunction
+
+function! s:decode(json)
+  let json = iconv(a:json, "utf-8", &encoding)
+  let json = substitute(json, '\\n', '', 'g')
+  let json = substitute(json, 'null', '""', 'g')
+  let json = substitute(json, '\\u34;', '\\"', 'g')
+  try
+    let json = iconv(substitute(json, '\\u\(\x\x\x\x\)', '\=nr2char("0x".submatch(1), 1)', 'g'), 'utf-8', &enc)
+  catch /.*/
+    let json = substitute(json, '\\u\(\x\x\x\x\)', '\=s:nr2enc_char("0x".submatch(1))', 'g')
+  endtry
+  return eval(json)
+endfunction
+
+function! s:out(line)
+  call setline(line('$')+1, a:line)
+endfunction
+
+function! weather#test()
+  let g:json = s:decode(system('curl -L -s -k http://weather.livedoor.com/forecast/webservice/json/v1?city=110010'))
+endfunction
+
+function! weather#list(A, L, P)
+  let items = []
+  for item in g:weather#city_list
+    if !has_key(item, 'id')
+      continue
+    endif
+    if item.name =~ '^'.a:A
+      call add(items, item.name)
+    endif
+  endfor
+  return items
+endfunction
+
+function! weather#all(...)
+  if !executable('curl')
+    echoerr "cURL is not exist. Please install it."
+    return
+  endif
+
+  if len(a:000) > 0
+    let location = filter(copy(g:weather#city_list), 'v:val.name == a:000[0]')
+    if len(location) > 0
+      call weather#city(location[0].id)
+    endif
+    return
+  endif
+
+  " open window
+  call s:open_win()
+  let b:weather_win = s:WIN_ALL
+
+  setl modifiable
+  % delete _
+
+  let cities = ''
+  let first = 1
+  for city in g:weather#city_list
+    if !has_key(city, 'id')
+      if cities != ''
+        call s:out('  ' . cities)
+        let cities = ''
+      endif
+      if first == 1
+        call setline(1, s:title)
+        let first = 0
+      else
+        call s:out('')
+      endif
+      call s:out(city.name)
+    else
+      let cities .= city.name . ' '
+    endif
+  endfor
+  if cities != ''
+    call s:out('  ' . cities)
+  endif
+  call s:out('')
+
+  setl nomodifiable
+  call cursor(b:cline[s:WIN_ALL], 3)
+
+endfunction
+
+function! weather#city(city)
+  " request
+  try
+    let json = s:decode(system('curl -L -s -k http://weather.livedoor.com/forecast/webservice/json/v1?city=' . a:city))
+  catch /.*/
+    echoerr "get weather data error."
+    return
+  endtry
+
+  if len(json.forecasts) < 3
+    call add(json.forecasts, {'date':'', 'dateLabel':'', 'telop':'', 'temperature':{}})
+  endif
+
+  " open window
+  call s:open_win()
+  let b:weather_win = s:WIN_CITY
+  setl modifiable
+  % delete _
+
+  " title
+  call setline(1, s:title)
+  call setline(2, '')
+
+  " weather
+  call s:out(printf('| (%10s)  | (%10s)  | (%10s)  | %s',    json.forecasts[0].date, json.forecasts[1].date, json.forecasts[2].date, json.location.area))
+  call s:out(printf('| %-10s    | %-10s    | %-10s    | %s', json.forecasts[0].dateLabel, json.forecasts[1].dateLabel, json.forecasts[2].dateLabel, json.location.prefecture))
+  call s:out(printf('| %-10s    | %-10s    | %-10s    | %s', json.forecasts[0].telop, json.forecasts[1].telop, json.forecasts[2].telop, json.location.city))
+  let templ = ''
+  for idx in range(len(json.forecasts))
+    if has_key(json.forecasts[idx].temperature, 'min')
+      try
+        let templ .= printf('| %-10s    ', json.forecasts[idx].temperature.min.celsius . ' Å` ' . json.forecasts[idx].temperature.max.celsius . 'Åã')
+      catch /.*/
+        let templ .= '|               '
+      endtry
+    else
+      let templ .= '|               '
+    endif
+  endfor
+  call s:out(templ . '| ')
+  call s:out('')
+
+  " è⁄ç◊
+  call s:out('---------------------------------------------------------------')
+  call s:out(json.description.text)
+  call s:out('')
+  call s:out(s:toAll)
+  call s:out('')
+
+  " copyright
+  call s:out('---------------------------------------------------------------')
+  call s:out(json.copyright.title)
+  call s:out(json.copyright.provider[0].name . ' ' . json.copyright.provider[0].link)
+  call s:out('')
+  setl nomodifiable
+
+  let s:locations = json.pinpointLocations
+endfunction
+
+function! s:open_win()
+  if !exists('b:weather_win')
+    new
+    silent edit weather
+    setl bt=nofile noswf wrap hidden nolist nomodifiable ft=weather
+    nnoremap <buffer><Plug>(weather-click) :<C-u>call weather#click()<CR>
+    nnoremap <buffer><Plug>(weather-back) :<C-u>call weather#back()<CR>
+    nmap <buffer><CR> <Plug>(weather-click)
+    nmap <buffer><BS> <Plug>(weather-back)
+    let b:weather_win = 0
+    let b:cline = [0, 0]
+  endif
+endfunction
+
+function! weather#click()
+  let word = expand('<cWORD>')
+  let b:cline[b:weather_win] = line('.')
+  if b:weather_win == s:WIN_CITY
+    if word == s:toAll
+      call weather#all()
+    endif
+  elseif b:weather_win == s:WIN_ALL
+    let location = filter(copy(g:weather#city_list), 'v:val.name == word')
+    if len(location) > 0 && has_key(location[0], 'id')
+      call weather#city(location[0].id)
+    endif
+  endif
+endfunction
+
+function! weather#back()
+  call weather#all()
+endfunction
+
+" --- city lit ---
+
 let g:weather#city_list = [
   \ { "name":"ìπñk"},
   \ { "name":"ítì‡", "id":"011000"},
@@ -197,190 +397,4 @@ let g:weather#city_list = [
   \ { "name":"êŒä_ìá", "id":"474010"},
   \ { "name":"ó^ìﬂçëìá", "id":"474020"},
   \ ]
-
-function! s:nr2byte(nr)
-  if a:nr < 0x80
-    return nr2char(a:nr)
-  elseif a:nr < 0x800
-    return nr2char(a:nr/64+192).nr2char(a:nr%64+128)
-  else
-    return nr2char(a:nr/4096%16+224).nr2char(a:nr/64%64+128).nr2char(a:nr%64+128)
-  endif
-endfunction
-
-function! s:nr2enc_char(charcode)
-  if &encoding == 'utf-8'
-    return nr2char(a:charcode)
-  endif
-  let char = s:nr2byte(a:charcode)
-  if strlen(char) > 1
-    let char = strtrans(iconv(char, 'utf-8', &encoding))
-  endif
-  return char
-endfunction
-
-function! s:decode(json)
-  let json = iconv(a:json, "utf-8", &encoding)
-  let json = substitute(json, '\\n', '', 'g')
-  let json = substitute(json, 'null', '""', 'g')
-  let json = substitute(json, '\\u34;', '\\"', 'g')
-  try
-    let json = iconv(substitute(json, '\\u\(\x\x\x\x\)', '\=nr2char("0x".submatch(1), 1)', 'g'), 'utf-8', &enc)
-  catch /.*/
-    let json = substitute(json, '\\u\(\x\x\x\x\)', '\=s:nr2enc_char("0x".submatch(1))', 'g')
-  endtry
-  return eval(json)
-endfunction
-
-function! s:out(line)
-  call setline(line('$')+1, a:line)
-endfunction
-
-function! weather#test()
-  let g:json = s:decode(system('curl -L -s -k http://weather.livedoor.com/forecast/webservice/json/v1?city=110010'))
-endfunction
-
-function! weather#list(A, L, P)
-  let items = []
-  for item in g:weather#city_list
-    if !has_key(item, 'id')
-      continue
-    endif
-    if item.name =~ '^'.a:A
-      call add(items, item.name)
-    endif
-  endfor
-  return items
-endfunction
-
-function! weather#all(...)
-  if !executable('curl')
-    echoerr "cURL is not exist. Please install it."
-    return
-  endif
-
-  if len(a:000) > 0
-    let location = filter(copy(g:weather#city_list), 'v:val.name == a:000[0]')
-    if len(location) > 0
-      call weather#city(location[0].id)
-    endif
-    return
-  endif
-
-  " open window
-  call s:open_win()
-  let b:weather_win = s:WIN_ALL
-
-  setl modifiable
-  % delete _
-  let first = 1
-  for city in g:weather#city_list
-    if !has_key(city, 'id')
-      if first != 1
-        call s:out('')
-      else
-        call setline(1, s:title)
-        let first = 0
-      endif
-      call s:out(city.name)
-    else
-      call s:out('  ' . city.name)
-    endif
-  endfor
-  setl nomodifiable
-  call cursor(b:cline[s:WIN_ALL], 3)
-
-endfunction
-
-function! weather#city(city)
-  " request
-  try
-    let json = s:decode(system('curl -L -s -k http://weather.livedoor.com/forecast/webservice/json/v1?city=' . a:city))
-  catch /.*/
-    echoerr "get weather data error."
-    return
-  endtry
-
-  if len(json.forecasts) < 3
-    call add(json.forecasts, {'date':'', 'dateLabel':'', 'telop':'', 'temperature':{}})
-  endif
-
-  " open window
-  call s:open_win()
-  let b:weather_win = s:WIN_CITY
-  setl modifiable
-  % delete _
-
-  " title
-  call setline(1, s:title)
-  call setline(2, '')
-
-  " weather
-  call s:out(printf('| (%10s)  | (%10s)  | (%10s)  | %s',    json.forecasts[0].date, json.forecasts[1].date, json.forecasts[2].date, json.location.area))
-  call s:out(printf('| %-10s    | %-10s    | %-10s    | %s', json.forecasts[0].dateLabel, json.forecasts[1].dateLabel, json.forecasts[2].dateLabel, json.location.prefecture))
-  call s:out(printf('| %-10s    | %-10s    | %-10s    | %s', json.forecasts[0].telop, json.forecasts[1].telop, json.forecasts[2].telop, json.location.city))
-  let templ = ''
-  for idx in range(len(json.forecasts))
-    if has_key(json.forecasts[idx].temperature, 'min')
-      try
-        let templ .= printf('| %-10s    ', json.forecasts[idx].temperature.min.celsius . ' Å` ' . json.forecasts[idx].temperature.max.celsius . 'Åã')
-      catch /.*/
-        let templ .= '|               '
-      endtry
-    else
-      let templ .= '|               '
-    endif
-  endfor
-  call s:out(templ . '| ')
-  call s:out('')
-
-  " è⁄ç◊
-  call s:out('---------------------------------------------------------------')
-  call s:out(json.description.text)
-  call s:out('')
-  call s:out(s:toAll)
-  call s:out('')
-
-  " copyright
-  call s:out('---------------------------------------------------------------')
-  call s:out(json.copyright.title)
-  call s:out(json.copyright.provider[0].name . ' ' . json.copyright.provider[0].link)
-  call s:out('')
-  setl nomodifiable
-
-  let s:locations = json.pinpointLocations
-endfunction
-
-function! s:open_win()
-  if !exists('b:weather_win')
-    new
-    silent edit weather
-    setl bt=nofile noswf wrap hidden nolist nomodifiable ft=weather
-    nnoremap <buffer><Plug>(weather-click) :<C-u>call weather#click()<CR>
-    nnoremap <buffer><Plug>(weather-back) :<C-u>call weather#back()<CR>
-    nmap <buffer><CR> <Plug>(weather-click)
-    nmap <buffer><BS> <Plug>(weather-back)
-    let b:weather_win = 0
-    let b:cline = [0, 0]
-  endif
-endfunction
-
-function! weather#click()
-  let word = expand('<cWORD>')
-  let b:cline[b:weather_win] = line('.')
-  if b:weather_win == s:WIN_CITY
-    if word == s:toAll
-      call weather#all()
-    endif
-  elseif b:weather_win == s:WIN_ALL
-    let location = filter(copy(g:weather#city_list), 'v:val.name == word')
-    if len(location) > 0
-      call weather#city(location[0].id)
-    endif
-  endif
-endfunction
-
-function! weather#back()
-  call weather#all()
-endfunction
 

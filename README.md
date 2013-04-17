@@ -24,5 +24,6 @@ Image
 ![sample1](http://yuratomo.up.seesaa.net/image/weather-vim1-thumbnail2.PNG ":Weather")
 
 :Weather さいたま
+
 ![sample2](http://yuratomo.up.seesaa.net/image/weather-vim2-thumbnail2.PNG ":Weather さいたま")
 

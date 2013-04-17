@@ -4,7 +4,7 @@ elseif exists("b:current_syntax")
   finish
 endif
 
-syn match weatherTitle "WEATHER-VIM"
+syn match weatherTitle "------------------------  WEATHER-VIM  ------------------------"
 syn keyword weatherToday ¡“ú
 syn keyword weatherTommorow –¾“ú
 syn keyword weatherDayAfterTommorow –¾Œã“ú

@@ -1,4 +1,4 @@
-let s:title = '                   ---  WEATHER-VIM  ---'
+let s:title = '------------------------  WEATHER-VIM  ------------------------'
 let s:toAll = '>>ëSçë'
 let s:locations = []
 let [s:WIN_ALL, s:WIN_CITY] = range(2)
@@ -129,7 +129,6 @@ function! weather#city(city)
 
   " title
   call setline(1, s:title)
-  call setline(2, '')
 
   " weather
   call s:out(printf('| (%10s)  | (%10s)  | (%10s)  | %s',    json.forecasts[0].date, json.forecasts[1].date, json.forecasts[2].date, json.location.area))
@@ -148,11 +147,10 @@ function! weather#city(city)
     endif
   endfor
   call s:out(templ . '| ')
-  call s:out('')
 
   " è⁄ç◊
   call s:out('---------------------------------------------------------------')
-  call s:out(json.description.text)
+  call s:out(map(split(json.description.text, 'ÅB \{0,1\}'), 'v:val . "ÅB"'))
   call s:out('')
   call s:out(s:toAll)
   call s:out('')

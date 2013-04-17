@@ -20,8 +20,9 @@ Usage
 Image
 -----
 :Weather
-http://yuratomo.up.seesaa.net/image/weather-vim2-thumbnail1.PNG
+
+![sample1](http://yuratomo.up.seesaa.net/image/weather-vim2-thumbnail1.PNG ":Weather")
 
 :Weather さいたま
-http://yuratomo.up.seesaa.net/image/weather-vim2-thumbnail2.PNG
+![sample2](http://yuratomo.up.seesaa.net/image/weather-vim2-thumbnail2.PNG ":Weather さいたま")
 
